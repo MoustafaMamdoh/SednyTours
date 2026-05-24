@@ -1,4 +1,5 @@
-const BASE = "http://localhost:8000/api";
+const isDev = window.location.port === "5173";
+const BASE = isDev ? `http://${window.location.hostname}:8000/api` : "/api";
 
 async function req(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };

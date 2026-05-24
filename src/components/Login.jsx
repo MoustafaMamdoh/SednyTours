@@ -68,11 +68,9 @@ export default function Login({ onLogin }) {
           </button>
         </form>
 
-        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '1rem' }}>
-          للتجربة:<br/>
-          المدير (admin / admin123)<br/>
-          الموظف (accountant / acc123)
-        </div>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '0.5rem' }}>
+          سيدني تورز © {new Date().getFullYear()} — جميع الحقوق محفوظة
+        </p>
       </div>
     </div>
   );

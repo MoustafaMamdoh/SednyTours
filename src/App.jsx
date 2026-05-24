@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Plane, LayoutDashboard, Receipt as ReceiptIcon, FileSpreadsheet,
   FileText, Users, Settings as SettingsIcon, Banknote, TrendingUp,
-  Search, LogOut, User, ChevronDown, AlertCircle
+  Search, LogOut, User, ChevronDown, AlertCircle, Menu, X as XIcon
 } from 'lucide-react';
 import { api } from './api.js';
 import Login    from './components/Login.jsx';
@@ -171,6 +171,7 @@ function APIStatusBadge() {
 export default function App() {
   const [tab, setTab]   = useState('dashboard');
   const [user, setUser] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('sydney_user');
@@ -184,16 +185,28 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside className="sidebar glass-panel">
-        <div className="brand-logo">
-          <div className="logo-icon"><Plane size={24} /></div>
-          سيدني تورز
+      <aside className={`sidebar glass-panel ${isSidebarOpen ? 'open' : ''}`}>
+        <div className="brand-logo" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div className="logo-icon"><Plane size={24} /></div>
+            سيدني تورز
+          </div>
+          {isSidebarOpen && (
+            <button className="mobile-menu-btn" onClick={() => setIsSidebarOpen(false)} style={{ background: 'transparent', color: 'var(--text-secondary)' }}>
+              <XIcon size={24} />
+            </button>
+          )}
         </div>
         <nav className="nav-menu" style={{ marginTop: '2rem' }}>
           {NAV.map(({ id, label, icon: Icon }) => (
             <a key={id} href="#" className={`nav-item ${tab === id ? 'active' : ''}`}
-              onClick={e => { e.preventDefault(); setTab(id); }}>
+              onClick={e => { e.preventDefault(); setTab(id); setIsSidebarOpen(false); }}>
               <Icon /><span>{label}</span>
             </a>
           ))}
@@ -206,7 +219,12 @@ export default function App() {
       {/* Main */}
       <main className="main-content">
         <header className="topbar">
-          <h1 className="page-title">{PAGE_TITLES[tab]}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <button className="mobile-menu-btn" onClick={() => setIsSidebarOpen(true)}>
+              <Menu size={20} />
+            </button>
+            <h1 className="page-title">{PAGE_TITLES[tab]}</h1>
+          </div>
           <ProfileMenu user={user} onLogout={handleLogout} />
         </header>
 
