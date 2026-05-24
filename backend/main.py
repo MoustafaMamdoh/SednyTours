@@ -6,6 +6,12 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
 import hashlib
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from database import (
     get_db, create_tables,
@@ -18,11 +24,14 @@ app = FastAPI(title="Sydney Tours Accounting API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── SERVE FRONTEND (Single Server Mode) ────────────────────
+frontend_dist = os.path.join(os.path.dirname(__file__), "..", "dist")
 
 @app.on_event("startup")
 def startup():
