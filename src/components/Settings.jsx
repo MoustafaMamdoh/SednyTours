@@ -129,7 +129,7 @@ export default function Settings({ user }) {
 
   const handleDownloadBackup = async () => {
     try {
-      const res = await fetch(`${BASE}/backup?caller_id=${user?.id}`);
+      const res = await fetch(`${BASE}/backup?caller_id=${user?.id}&t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error('حدث خطأ. هل قمت بإعادة تشغيل الباك إند لتفعيل التحديث؟');
       }
