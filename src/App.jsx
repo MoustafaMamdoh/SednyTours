@@ -4,7 +4,7 @@ import {
   FileText, Users, Settings as SettingsIcon, Banknote, TrendingUp,
   Search, LogOut, User, ChevronDown, AlertCircle, Menu, X as XIcon
 } from 'lucide-react';
-import { api } from './api.js';
+import { api, BASE } from './api.js';
 import Login    from './components/Login.jsx';
 import Receipts  from './components/Receipts.jsx';
 import Journal   from './components/Journal.jsx';
@@ -152,8 +152,8 @@ function ProfileMenu({ user, onLogout }) {
 function APIStatusBadge() {
   const [online, setOnline] = useState(null);
   useEffect(() => {
-    fetch('http://localhost:8000/api/periods')
-      .then(() => setOnline(true))
+    fetch(`${BASE}/periods`)
+      .then((res) => setOnline(res.ok))
       .catch(() => setOnline(false));
   }, []);
   if (online === null) return null;
