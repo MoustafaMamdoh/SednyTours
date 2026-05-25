@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Users, UserPlus, FileSpreadsheet, Calculator, Edit2, Trash2, CheckCircle, X, Download } from 'lucide-react';
+import { Users, UserPlus, FileSpreadsheet, Calculator, Edit2, Trash2, CheckCircle, X, Download, FileOutput } from 'lucide-react';
 import { api } from '../api.js';
+import { exportToExcel } from '../utils/excel.js';
 
 const EMPTY_EMP = { name: '', job_title: '', base_salary: '', commission_rate: '' };
 
@@ -148,7 +149,22 @@ export default function Employees({ user }) {
       {tab === 'list' && (
         <div style={{ display: 'flex', gap: '1.5rem', flex: 1, minHeight: 0 }}>
           <div className="glass-panel" style={{ flex: 2.5, padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ color: 'var(--secondary-color)', marginBottom: '1.5rem' }}>بيانات الموظفين والوكلاء</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ color: 'var(--secondary-color)', margin: 0 }}>بيانات الموظفين والوكلاء</h3>
+              <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.85rem' }} onClick={() => {
+                const data = employees.map(e => ({
+                  'الرقم': e.id,
+                  'الاسم': e.name,
+                  'الوظيفة': e.job_title,
+                  'الراتب الأساسي': e.base_salary,
+                  'نسبة العمولة': `${e.commission_rate}%`,
+                  'الحالة': e.is_active ? 'نشط' : 'موقوف'
+                }));
+                exportToExcel(data, 'الموظفين');
+              }}>
+                <FileOutput size={14} /> تصدير إكسيل
+              </button>
+            </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <table className="custom-table">
                 <thead>
@@ -219,6 +235,22 @@ export default function Employees({ user }) {
               <select className="custom-input" value={period} onChange={e => setPeriod(parseInt(e.target.value))}>
                 {periods.map(p => <option key={p.id} value={p.id}>{p.type_period} {p.month}/{p.year}</option>)}
               </select>
+              <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={() => {
+                const data = salaries.map(s => ({
+                  'الموظف': s.employee_name,
+                  'الوظيفة': s.job_title,
+                  'الأساسي': s.base_salary,
+                  'مكافآت': s.bonus,
+                  'عمولات المبيعات': s.commission,
+                  'خصومات': s.deductions,
+                  'عهدة': s.guarantee,
+                  'الصافي': s.net_salary
+                }));
+                const pName = periods.find(p => p.id === period);
+                exportToExcel(data, `رواتب_${pName ? pName.month + '_' + pName.year : 'الشهر'}`);
+              }}>
+                <FileOutput size={16} /> تصدير
+              </button>
               {isAdmin && (
                 <button className="btn btn-primary" onClick={runPayroll} disabled={payrollLoading} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Download size={16} /> استحضار العمولات وإعداد الرواتب

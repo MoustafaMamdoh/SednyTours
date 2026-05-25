@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Search, CheckCircle, Trash2, Edit2, AlertCircle } from 'lucide-react';
+import { Plus, Search, CheckCircle, Trash2, Edit2, AlertCircle, Download } from 'lucide-react';
 import { api } from '../api.js';
+import { exportToExcel } from '../utils/excel.js';
 
 /* ── Combobox for Journal ─────────────────────────────── */
 function AccountCombobox({ accounts, value_id, value_manual, onChange }) {
@@ -130,6 +131,19 @@ export default function Journal({ user }) {
     catch (e) { alert(e.message); }
   }
 
+  function handleExport() {
+    const data = entries.map(e => ({
+      'المستند': e.doc_no,
+      'النوع': e.doc_type,
+      'التاريخ': e.date,
+      'الحساب': e.account,
+      'البيان': e.description,
+      'مدين': e.debit || 0,
+      'دائن': e.credit || 0
+    }));
+    exportToExcel(data, 'دفتر_اليومية');
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
       {/* ── Add Entry Form ──────────────────────────────────── */}
@@ -227,7 +241,12 @@ export default function Journal({ user }) {
       {/* ── Ledger Data ─────────────────────────────────────── */}
       <div className="glass-panel" style={{ flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h3 style={{ color: 'var(--secondary-color)' }}>دفتر اليومية العامة</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <h3 style={{ color: 'var(--secondary-color)', margin: 0 }}>دفتر اليومية العامة</h3>
+            <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.85rem' }} onClick={handleExport}>
+              <Download size={14} /> تصدير إكسيل
+            </button>
+          </div>
           <div style={{ position: 'relative', width: '250px' }}>
             <Search size={16} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--text-muted)' }} />
             <input className="custom-input" style={{ paddingRight: '2rem' }}

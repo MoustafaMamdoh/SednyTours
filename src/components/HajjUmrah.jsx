@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { PlusCircle, Search, Users, FileText, MapPin, X, Calendar, Trash2, CheckCircle, User } from 'lucide-react';
+import { PlusCircle, Search, Users, FileText, MapPin, X, Calendar, Trash2, CheckCircle, User, Download } from 'lucide-react';
 import { api } from '../api.js';
+import { exportToExcel } from '../utils/excel.js';
 
 const EMPTY_TRIP = { trip_name: '', type: 'عمرة', hotel_makkah: '', hotel_madinah: '', nights_makkah: 7, nights_madinah: 4, departure_date: '', return_date: '', price_per_person: '', cost_per_person: '', max_pilgrims: 45, seller_id: '' };
 const EMPTY_PILGRIM = { full_name: '', passport_no: '', national_id: '', phone: '', total_price: '', amount_paid: '' };
@@ -93,11 +94,30 @@ export default function HajjUmrah({ user }) {
               </h2>
               <p style={{ color: 'var(--text-secondary)', marginTop: '0.3rem', fontSize: '0.9rem' }}>{trips.length} رحلة مسجلة في النظام</p>
             </div>
-            {isAdmin && (
-              <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-                <PlusCircle size={18} /> إضافة رحلة جديدة
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button className="btn btn-outline" onClick={() => {
+                const data = trips.map(t => ({
+                  'اسم الرحلة': t.trip_name,
+                  'تاريخ السفر': t.departure_date,
+                  'فندق مكة': t.hotel_makkah,
+                  'فندق المدينة': t.hotel_madinah,
+                  'الحالة': t.status,
+                  'البائع': t.seller_name || '-',
+                  'المسجلين': `${t.registered} / ${t.max_pilgrims}`,
+                  'خالصي الدفع': t.fully_paid_count,
+                  'المتحصلات': t.collected,
+                  'الربح المتوقع': t.expected_profit
+                }));
+                exportToExcel(data, 'رحلات_الحج_والعمرة');
+              }}>
+                <Download size={16} /> تصدير الرحلات
               </button>
-            )}
+              {isAdmin && (
+                <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+                  <PlusCircle size={18} /> إضافة رحلة جديدة
+                </button>
+              )}
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '1.5rem', overflowY: 'auto', paddingBottom: '2rem' }}>
@@ -205,10 +225,25 @@ export default function HajjUmrah({ user }) {
             <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <h4 style={{ color: 'var(--secondary-color)' }}>قائمة المعتمرين ({pilgrims.length})</h4>
-                <button className="btn btn-outline" style={{ padding: '0.4rem 1rem' }} onClick={() => {
-                  setPForm({ ...EMPTY_PILGRIM, total_price: activeTrip.price_per_person.toString() });
-                  setShowPForm(true);
-                }}><PlusCircle size={16} /> إضافة معتمر</button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn btn-outline" style={{ padding: '0.4rem 0.8rem' }} onClick={() => {
+                    const data = pilgrims.map(p => ({
+                      'الاسم': p.full_name,
+                      'رقم الجواز': p.passport_no,
+                      'المدفوع': p.amount_paid,
+                      'المطلوب': p.total_price,
+                      'المتبقي': p.remaining,
+                      'حالة الدفع': p.is_fully_paid ? 'خالص' : 'متبقي'
+                    }));
+                    exportToExcel(data, `معتمرين_${activeTrip.trip_name}`);
+                  }}>
+                    <Download size={14} /> إكسيل
+                  </button>
+                  <button className="btn btn-outline" style={{ padding: '0.4rem 1rem' }} onClick={() => {
+                    setPForm({ ...EMPTY_PILGRIM, total_price: activeTrip.price_per_person.toString() });
+                    setShowPForm(true);
+                  }}><PlusCircle size={16} /> إضافة معتمر</button>
+                </div>
               </div>
 
               {showPForm && (

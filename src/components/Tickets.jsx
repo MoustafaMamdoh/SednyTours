@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { PlusCircle, Search, Edit2, Trash2, CheckCircle, X, Plane } from 'lucide-react';
+import { PlusCircle, Search, Edit2, Trash2, CheckCircle, X, Plane, Download } from 'lucide-react';
 import { api } from '../api.js';
+import { exportToExcel } from '../utils/excel.js';
 
 const EMPTY = { pnr: '', airline: '', passenger_name: '', route: '', cost_price: '', sell_price: '', ticket_type: 'اقتصادي', seller_id: '', seller_commission: '' };
 const TYPES = ['اقتصادي', 'أعمال', 'أول'];
@@ -158,6 +159,24 @@ export default function Tickets({ user }) {
     !search || t.pnr.includes(search) || t.passenger_name.includes(search) || t.airline.includes(search)
   );
 
+  function handleExport() {
+    const data = filtered.map(t => ({
+      'PNR': t.pnr,
+      'التاريخ': t.date,
+      'الشركة': t.airline,
+      'خط السير': t.route,
+      'اسم الراكب': t.passenger_name,
+      'الدرجة': t.ticket_type,
+      'سعر الشراء': t.cost_price,
+      'سعر البيع': t.sell_price,
+      'الربح': t.profit,
+      'البائع': t.seller_name || '-',
+      'العمولة': t.seller_commission || 0,
+      'الحالة': t.status
+    }));
+    exportToExcel(data, 'تذاكر_الطيران');
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
       {/* ── Stats ────────────────────────────────────────────── */}
@@ -180,7 +199,12 @@ export default function Tickets({ user }) {
         {/* ── List ────────────────────────────────────────────── */}
         <div className="glass-panel" style={{ flex: 2.5, padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h3 style={{ color: 'var(--secondary-color)' }}>سجل التذاكر</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <h3 style={{ color: 'var(--secondary-color)', margin: 0 }}>سجل التذاكر</h3>
+              <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.85rem' }} onClick={handleExport}>
+                <Download size={14} /> تصدير إكسيل
+              </button>
+            </div>
             <div style={{ position: 'relative', width: '250px' }}>
               <Search size={16} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--text-muted)' }} />
               <input className="custom-input" style={{ paddingRight: '2rem' }}

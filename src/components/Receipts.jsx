@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { PlusCircle, CheckCircle, Wallet, Landmark, CreditCard, FileText, X, Trash2, Edit2, User } from 'lucide-react';
+import { PlusCircle, CheckCircle, Wallet, Landmark, CreditCard, FileText, X, Trash2, Edit2, User, Download } from 'lucide-react';
 import { api } from '../api.js';
+import { exportToExcel } from '../utils/excel.js';
 
 const TYPES   = ['قبض', 'صرف'];
 const METHODS = [
@@ -175,12 +176,34 @@ export default function Receipts({ user }) {
     r.payee?.includes(search) || r.account_name?.includes(search)
   );
 
+  function handleExport() {
+    const data = filtered.map(r => ({
+      'رقم السند': r.receipt_no,
+      'النوع': r.type,
+      'التاريخ': r.date,
+      'الحساب': r.account_name || r.account_name_manual,
+      'الدافع/المستلم': r.payee,
+      'البيان': r.description,
+      'المبلغ': r.amount,
+      'طريقة الدفع': METHODS.find(m => m.id === r.payment_method)?.label || r.payment_method,
+      'البائع': r.seller_name || '-',
+      'عمولة البائع': r.seller_commission || 0,
+      'الحالة': r.is_accepted ? 'معتمد' : 'مسودة'
+    }));
+    exportToExcel(data, 'سندات_القبض_والصرف');
+  }
+
   return (
     <div style={{ display: 'flex', gap: '1.5rem', height: '100%' }}>
       {/* ── List ─────────────────────────────────────────────── */}
       <div className="glass-panel" style={{ flex: 2.5, padding: '1.5rem', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h3 style={{ color: 'var(--secondary-color)' }}>السندات الأخيرة</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <h3 style={{ color: 'var(--secondary-color)', margin: 0 }}>السندات الأخيرة</h3>
+            <button className="btn btn-outline" style={{ padding: '0.3rem 0.6rem', fontSize: '0.85rem' }} onClick={handleExport}>
+              <Download size={14} /> تصدير إكسيل
+            </button>
+          </div>
           <input className="custom-input" style={{ width: '200px' }} placeholder="🔍 بحث..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
