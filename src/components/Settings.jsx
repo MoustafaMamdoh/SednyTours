@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import {
   Settings as SettingsIcon, Shield, Database, Users,
   PlusCircle, Trash2, Edit2, CheckCircle, X, Eye, EyeOff,
-  RefreshCw, Key
+  RefreshCw, Key, Download, Upload
 } from 'lucide-react';
-import { api } from '../api.js';
+import { api, BASE } from '../api.js';
 
 const LEVEL_LABEL = { 1: 'مدخل بيانات', 2: 'محاسب', 3: 'مدير عام' };
 const LEVEL_COLOR = { 1: 'warning', 2: 'primary', 3: 'success' };
@@ -32,6 +32,7 @@ export default function Settings({ user }) {
 
   // ── Active tab ────────────────────────────────────────────
   const [tab, setTab] = useState('users');
+  const [restoreStatus, setRestoreStatus] = useState('');
 
   const loadAll = () => {
     api.getUsers().then(setUsers).catch(() => {});
@@ -104,6 +105,27 @@ export default function Settings({ user }) {
   }
 
   const byType = (t) => accounts.filter(a => a.type === t && a.parent_id != null);
+
+  // ──────────────────────────────────────────────────────────
+  //  BACKUP / RESTORE
+  // ──────────────────────────────────────────────────────────
+  const handleRestore = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!window.confirm("تنبيه خطير: استعادة النسخة الاحتياطية ستمسح جميع البيانات الحالية. هل أنت متأكد؟")) {
+      e.target.value = null;
+      return;
+    }
+    try {
+      setRestoreStatus("جاري الاستعادة...");
+      const res = await api.restoreBackup(file, user.id);
+      setRestoreStatus(res.message || "تمت الاستعادة بنجاح!");
+      alert("تمت الاستعادة بنجاح. يجب إعادة تحميل الصفحة.");
+      window.location.reload();
+    } catch (err) {
+      setRestoreStatus("خطأ: " + err.message);
+    }
+  };
 
   // ──────────────────────────────────────────────────────────
   //  RENDER
@@ -357,9 +379,26 @@ export default function Settings({ user }) {
                 <span>{v}</span>
               </div>
             ))}
-            <button className="btn btn-primary" style={{ marginTop: '1.5rem', width: '100%' }}>
-              إنشاء نسخة احتياطية (Backup)
-            </button>
+            
+            <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <a href={`${BASE}/backup?caller_id=${user?.id}`} download 
+                 className="btn btn-primary" style={{ textAlign: 'center', textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                <Download size={16} /> تحميل نسخة احتياطية (Backup)
+              </a>
+              
+              <div style={{ position: 'relative' }}>
+                <input type="file" accept=".db" onChange={handleRestore}
+                       style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                <button className="btn btn-outline" style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                  <Upload size={16} /> استرجاع نسخة احتياطية (Restore)
+                </button>
+              </div>
+              {restoreStatus && (
+                <div style={{ textAlign: 'center', fontSize: '0.85rem', color: restoreStatus.includes('خطأ') ? 'var(--danger-color)' : 'var(--success-color)', fontWeight: 600 }}>
+                  {restoreStatus}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="glass-panel" style={{ padding: '1.5rem' }}>

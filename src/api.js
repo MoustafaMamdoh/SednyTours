@@ -1,5 +1,5 @@
 const isDev = window.location.port === "5173";
-const BASE = isDev ? `http://${window.location.hostname}:8000/api` : "/api";
+export const BASE = isDev ? `http://${window.location.hostname}:8000/api` : "/api";
 
 async function req(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
@@ -72,4 +72,20 @@ export const api = {
   getSalaries:  (periodId)      => req("GET",  `/salaries?period_id=${periodId}`),
   runPayroll:   (periodId)      => req("POST", `/salaries/run-payroll?period_id=${periodId}&auto_commissions=true`),
   updateSalary: (id, d, uid)   => req("PUT",  `/salaries/${id}?caller_id=${uid}`, d),
+
+  // Backup / Restore
+  restoreBackup: async (file, uid) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/restore?caller_id=${uid}`, {
+      method: "POST",
+      body: formData,
+      // Do NOT set Content-Type header manually, let fetch set boundary
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || "خطأ في الاستعادة");
+    }
+    return res.json();
+  }
 };

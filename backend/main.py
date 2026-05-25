@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+import shutil
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -838,6 +839,34 @@ def list_periods(db: Session = Depends(get_db)):
     return [{"id": p.id, "year": p.year, "month": p.month,
              "type": p.type_period, "is_closed": p.is_closed}
             for p in db.query(Period).all()]
+
+
+# ═══════════════════════════════════════════════════════════════
+#  BACKUP & RESTORE
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/backup")
+def download_backup(caller_id: int = 1, db: Session = Depends(get_db)):
+    require_admin(caller_id, db)
+    db_path = os.path.join(os.path.dirname(__file__), "sydney_tours.db")
+    if not os.path.exists(db_path):
+        raise HTTPException(404, "ملف قاعدة البيانات غير موجود")
+    return FileResponse(db_path, media_type="application/octet-stream", filename=f"sydney_tours_backup_{date.today()}.db")
+
+@app.post("/api/restore")
+async def restore_backup(file: UploadFile = File(...), caller_id: int = 1, db: Session = Depends(get_db)):
+    require_admin(caller_id, db)
+    if not file.filename.endswith(".db"):
+        raise HTTPException(400, "يجب أن يكون الملف بامتداد .db")
+    
+    db_path = os.path.join(os.path.dirname(__file__), "sydney_tours.db")
+    
+    # Close connections if possible, though SQLite handles it okay usually if we just replace it
+    try:
+        with open(db_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return {"status": "success", "message": "تم استعادة النسخة الاحتياطية بنجاح! قد تحتاج لإعادة تشغيل السيرفر."}
+    except Exception as e:
+        raise HTTPException(500, f"حدث خطأ أثناء الاستعادة: {str(e)}")
 
 
 # ═══════════════════════════════════════════════════════════════
