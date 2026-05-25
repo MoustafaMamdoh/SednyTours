@@ -127,6 +127,29 @@ export default function Settings({ user }) {
     }
   };
 
+  const handleDownloadBackup = async () => {
+    try {
+      const res = await fetch(`${BASE}/backup?caller_id=${user?.id}`);
+      if (!res.ok) {
+        throw new Error('حدث خطأ. هل قمت بإعادة تشغيل الباك إند لتفعيل التحديث؟');
+      }
+      const blob = await res.blob();
+      if (blob.type.includes("text/html")) {
+        throw new Error("السيرفر أرجع ملف HTML بدلاً من قاعدة البيانات. يرجى التأكد من إعادة تشغيل الباك إند (Terminal) لتفعيل الأكواد الجديدة.");
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sydney_tours_backup_${new Date().toISOString().split('T')[0]}.db`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   // ──────────────────────────────────────────────────────────
   //  RENDER
   // ──────────────────────────────────────────────────────────
@@ -381,10 +404,10 @@ export default function Settings({ user }) {
             ))}
             
             <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <a href={`${BASE}/backup?caller_id=${user?.id}`} download 
-                 className="btn btn-primary" style={{ textAlign: 'center', textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+              <button onClick={handleDownloadBackup}
+                 className="btn btn-primary" style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                 <Download size={16} /> تحميل نسخة احتياطية (Backup)
-              </a>
+              </button>
               
               <div style={{ position: 'relative' }}>
                 <input type="file" accept=".db" onChange={handleRestore}
