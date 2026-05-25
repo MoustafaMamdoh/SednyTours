@@ -1,284 +1,277 @@
-import React, { useEffect, useState } from 'react';
-import { FileSpreadsheet, Download, Search, PlusCircle, X, CheckCircle, Trash2 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Plus, Search, CheckCircle, Trash2, Edit2, AlertCircle } from 'lucide-react';
 import { api } from '../api.js';
+
+/* ── Combobox for Journal ─────────────────────────────── */
+function AccountCombobox({ accounts, value_id, value_manual, onChange }) {
+  const [query, setQuery] = useState(value_manual || '');
+  const [open, setOpen]   = useState(false);
+  const ref               = useRef(null);
+
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const filtered = query.length > 0
+    ? accounts.filter(a => a.name.includes(query) && a.parent_id != null)
+    : accounts.filter(a => a.parent_id != null);
+
+  function pick(acc) {
+    setQuery(acc.name); setOpen(false);
+    onChange({ account_id: acc.id, account_name_manual: acc.name });
+  }
+
+  function handleInput(v) {
+    setQuery(v); setOpen(true);
+    onChange({ account_id: null, account_name_manual: v });
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%' }}>
+      <input
+        className="custom-input"
+        style={{ padding: '0.4rem 0.75rem', fontSize: '0.9rem', width: '100%' }}
+        placeholder="اسم الحساب..."
+        value={query}
+        onChange={e => handleInput(e.target.value)}
+        onFocus={() => setOpen(true)}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, left: 0,
+          background: 'white', border: '1px solid rgba(0,0,0,0.1)',
+          borderRadius: 'var(--radius-md)', zIndex: 999, maxHeight: '200px', overflowY: 'auto'
+        }}>
+          {filtered.map(a => (
+            <div key={a.id} onClick={() => pick(a)}
+              style={{ padding: '0.5rem', cursor: 'pointer', fontSize: '0.85rem',
+                borderBottom: '1px solid rgba(0,0,0,0.05)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--primary-light)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+              {a.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Journal({ user }) {
   const isAdmin = user?.level === 3;
-  const [data, setData]     = useState({ items: [], total_debit: 0, total_credit: 0, total: 0 });
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ from_date: '', to_date: '', account_id: '', search: '' });
+  const [entries, setEntries] = useState([]);
+  const [stats, setStats]     = useState({ total_debit: 0, total_credit: 0 });
   const [accounts, setAccounts] = useState([]);
-  
-  // Manual Entry State
-  const [showEntryForm, setShowEntryForm] = useState(false);
-  const [entryMsg, setEntryMsg] = useState(null);
-  const [entrySaving, setEntrySaving] = useState(false);
-  const [newEntry, setNewEntry] = useState({
-    doc_no: `JRN-${Math.floor(Math.random()*10000)}`,
-    description: '',
-    entry_date: new Date().toISOString().split('T')[0],
-    lines: [
-      { account_id: '', debit: '', credit: '' },
-      { account_id: '', debit: '', credit: '' }
-    ]
-  });
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch]   = useState('');
 
-  const load = (f = filters) => {
-    setLoading(true);
-    api.getJournal(f).then(res => { setData(res); setLoading(false); }).catch(() => setLoading(false));
+  // المبسط: إضافة قيد يومية
+  const EMPTY_LINE = { account_id: null, account_name_manual: '', debit: '', credit: '', description: '' };
+  const [lines, setLines] = useState([{ ...EMPTY_LINE }, { ...EMPTY_LINE }]);
+  const [docNo, setDocNo] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const load = () => {
+    api.getJournal({ search }).then(data => {
+      setEntries(data.items);
+      setStats(data);
+    }).finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); api.getAccounts().then(setAccounts); }, []);
-  const set = (k, v) => setFilters(f => ({ ...f, [k]: v }));
+  useEffect(() => { load(); api.getAccounts().then(setAccounts); }, [search]);
 
-  // Manual Entry Handlers
-  const handleLineChange = (index, field, value) => {
-    const lines = [...newEntry.lines];
-    lines[index][field] = value;
-    if (field === 'debit' && value) lines[index]['credit'] = '';
-    if (field === 'credit' && value) lines[index]['debit'] = '';
-    setNewEntry({ ...newEntry, lines });
-  };
-  const addLine = () => setNewEntry({ ...newEntry, lines: [...newEntry.lines, { account_id: '', debit: '', credit: '' }] });
-  const removeLine = (idx) => setNewEntry({ ...newEntry, lines: newEntry.lines.filter((_, i) => i !== idx) });
+  const td = lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0);
+  const tc = lines.reduce((s, l) => s + (parseFloat(l.credit) || 0), 0);
+  const diff = td - tc;
 
-  const totalDebit = newEntry.lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0);
-  const totalCredit = newEntry.lines.reduce((s, l) => s + (parseFloat(l.credit) || 0), 0);
-  const isBalanced = totalDebit === totalCredit && totalDebit > 0;
+  function setLine(idx, k, v) {
+    const newL = [...lines];
+    newL[idx][k] = v;
+    setLines(newL);
+  }
 
-  const saveEntry = async () => {
-    if (!newEntry.description) { setEntryMsg({ type: 'error', text: 'يرجى إدخال البيان العام للقيد' }); return; }
-    if (!isBalanced) { setEntryMsg({ type: 'error', text: 'القيد غير متزن!' }); return; }
+  function addLine() { setLines([...lines, { ...EMPTY_LINE }]); }
+  function removeLine(idx) {
+    if (lines.length > 2) setLines(lines.filter((_, i) => i !== idx));
+  }
+
+  async function save() {
+    if (!docNo) { setMsg({ type: 'error', text: 'رقم القيد مطلوب' }); return; }
+    if (Math.abs(diff) > 0.01) { setMsg({ type: 'error', text: 'القيد غير متزن' }); return; }
+    const validLines = lines.filter(l => (parseFloat(l.debit) || parseFloat(l.credit)) && (l.account_id || l.account_name_manual));
+    if (validLines.length < 2) { setMsg({ type: 'error', text: 'يجب إدخال طرفين على الأقل' }); return; }
     
-    // Filter out empty lines
-    const validLines = newEntry.lines.filter(l => l.account_id && (l.debit || l.credit));
-    if (validLines.length < 2) { setEntryMsg({ type: 'error', text: 'يجب اختيار حسابين على الأقل' }); return; }
-
-    const payload = validLines.map(l => ({
-      doc_no: newEntry.doc_no,
-      doc_type: "JRN",
-      description: newEntry.description,
-      account_id: parseInt(l.account_id),
-      debit: parseFloat(l.debit) || 0,
-      credit: parseFloat(l.credit) || 0,
-      entry_date: newEntry.entry_date,
-      user_id: user.id
-    }));
-
-    setEntrySaving(true);
-    setEntryMsg(null);
+    setSaving(true); setMsg(null);
     try {
-      await api.createJournal(payload);
-      setEntryMsg({ type: 'success', text: 'تم حفظ القيد اليدوي بنجاح!' });
-      setTimeout(() => {
-        setShowEntryForm(false);
-        setNewEntry({
-          doc_no: `JRN-${Math.floor(Math.random()*10000)}`,
-          description: '', entry_date: new Date().toISOString().split('T')[0],
-          lines: [{ account_id: '', debit: '', credit: '' }, { account_id: '', debit: '', credit: '' }]
-        });
-        load();
-      }, 1500);
-    } catch (err) {
-      setEntryMsg({ type: 'error', text: err.message });
-    } finally {
-      setEntrySaving(false);
-    }
-  };
+      const payload = validLines.map(l => ({
+        doc_no: docNo, doc_type: 'JRN',
+        account_id: l.account_id,
+        account_name_manual: l.account_name_manual,
+        debit: parseFloat(l.debit) || 0,
+        credit: parseFloat(l.credit) || 0,
+        description: l.description || 'قيد تسوية',
+        user_id: user.id
+      }));
+      await api.createJournalEntry(payload);
+      setMsg({ type: 'success', text: 'تم تسجيل القيد بنجاح' });
+      setLines([{ ...EMPTY_LINE }, { ...EMPTY_LINE }]);
+      setDocNo('');
+      load();
+    } catch (e) { setMsg({ type: 'error', text: e.message }); }
+    finally { setSaving(false); }
+  }
 
-  const deleteEntry = async (id) => {
-    if(!window.confirm('حذف هذا السطر من القيد سيؤدي إلى خلل في توازن القيود، هل أنت متأكد من الحذف؟')) return;
-    try {
-        await api.deleteJournal(id, user.id);
-        load();
-    } catch(e) {
-        alert(e.message);
-    }
-  };
+  async function del(id) {
+    if (!window.confirm('هل أنت متأكد من حذف هذه الحركة؟')) return;
+    try { await api.deleteJournalEntry(id, user.id); load(); }
+    catch (e) { alert(e.message); }
+  }
 
   return (
-    <div className="glass-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '1.5rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-        <div>
-          <h2 style={{ color: 'var(--secondary-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FileSpreadsheet size={28} color="var(--primary-color)" />
-            دفتر اليومية العامة
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '0.3rem', fontSize: '0.9rem' }}>
-            كافة الحركات المُسمَّعة من جميع أقسام النظام — إجمالي {data.total} قيد
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn btn-outline" style={{ padding: '0.5rem 1.2rem', borderColor: 'var(--success-color)', color: 'var(--success-color)' }} onClick={() => setShowEntryForm(true)}>
-            <PlusCircle size={18} /> إضافة قيد يومية
-          </button>
-          <button className="btn btn-primary" style={{ padding: '0.5rem 1.2rem' }}>
-            <Download size={18} /> تصدير Excel
-          </button>
-        </div>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%' }}>
+      {/* ── Add Entry Form ──────────────────────────────────── */}
+      <div className="glass-panel" style={{ padding: '1.5rem', flexShrink: 0 }}>
+        <h3 style={{ color: 'var(--secondary-color)', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Plus size={20} /> إضافة قيد يومية يدوي (تسوية)
+        </h3>
+        
+        {msg && (
+          <div style={{ padding: '0.6rem 1rem', marginBottom: '1rem', borderRadius: 'var(--radius-md)',
+            background: msg.type === 'success' ? 'var(--success-light)' : 'var(--danger-light)',
+            color: msg.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)', fontWeight: 600 }}>
+            {msg.text}
+          </div>
+        )}
 
-      {/* Filters */}
-      <div className="glass-card" style={{ display: 'flex', gap: '1rem', padding: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '150px' }}>
-          <label style={{ fontSize: '0.8rem' }}>من تاريخ</label>
-          <input type="date" className="custom-input" value={filters.from_date} onChange={e => set('from_date', e.target.value)} />
-        </div>
-        <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '150px' }}>
-          <label style={{ fontSize: '0.8rem' }}>إلى تاريخ</label>
-          <input type="date" className="custom-input" value={filters.to_date} onChange={e => set('to_date', e.target.value)} />
-        </div>
-        <div className="form-group" style={{ margin: 0, flex: 1.5, minWidth: '200px' }}>
-          <label style={{ fontSize: '0.8rem' }}>تصفية بالحساب</label>
-          <select className="custom-input" value={filters.account_id} onChange={e => set('account_id', e.target.value)}>
-            <option value="">جميع الحسابات</option>
-            {accounts.filter(a => a.parent_id != null).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
-        <div className="form-group" style={{ margin: 0, flex: 2, minWidth: '250px' }}>
-          <label style={{ fontSize: '0.8rem' }}>بحث في البيان أو رقم المستند</label>
-          <div style={{ position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', right: '0.8rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input type="text" className="custom-input" style={{ paddingRight: '2.5rem' }} placeholder="اكتب للبحث..."
-              value={filters.search} onChange={e => set('search', e.target.value)} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+          <div style={{ width: '200px' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>رقم المستند / القيد</label>
+            <input className="custom-input" placeholder="JRN-1001" value={docNo} onChange={e => setDocNo(e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', gap: '1rem', background: 'rgba(0,0,0,0.02)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إجمالي المدين</div>
+              <div style={{ fontWeight: 700, color: 'var(--primary-color)' }}>{td.toLocaleString('ar-EG')}</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إجمالي الدائن</div>
+              <div style={{ fontWeight: 700, color: 'var(--secondary-color)' }}>{tc.toLocaleString('ar-EG')}</div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>الفرق</div>
+              <div style={{ fontWeight: 700, color: Math.abs(diff) > 0.01 ? 'var(--danger-color)' : 'var(--success-color)' }}>
+                {Math.abs(diff).toLocaleString('ar-EG')}
+              </div>
+            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-          <button className="btn btn-primary" style={{ padding: '0.7rem 1.5rem' }} onClick={() => load()}>بحث</button>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'rgba(0,0,0,0.03)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              <th style={{ padding: '0.5rem', textAlign: 'right', width: '25%' }}>الحساب</th>
+              <th style={{ padding: '0.5rem', textAlign: 'right', width: '15%' }}>مدين (له)</th>
+              <th style={{ padding: '0.5rem', textAlign: 'right', width: '15%' }}>دائن (عليه)</th>
+              <th style={{ padding: '0.5rem', textAlign: 'right' }}>البيان</th>
+              <th style={{ padding: '0.5rem', textAlign: 'center', width: '50px' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, i) => (
+              <tr key={i}>
+                <td style={{ padding: '0.2rem' }}>
+                  <AccountCombobox
+                    accounts={accounts}
+                    value_id={l.account_id}
+                    value_manual={l.account_name_manual}
+                    onChange={({ account_id, account_name_manual }) => {
+                      setLine(i, 'account_id', account_id);
+                      setLine(i, 'account_name_manual', account_name_manual);
+                    }}
+                  />
+                </td>
+                <td style={{ padding: '0.2rem' }}>
+                  <input type="number" className="custom-input amount-input" style={{ padding: '0.4rem', fontSize: '0.9rem' }}
+                    placeholder="0" value={l.debit} onChange={e => { setLine(i, 'debit', e.target.value); setLine(i, 'credit', ''); }} />
+                </td>
+                <td style={{ padding: '0.2rem' }}>
+                  <input type="number" className="custom-input amount-input" style={{ padding: '0.4rem', fontSize: '0.9rem' }}
+                    placeholder="0" value={l.credit} onChange={e => { setLine(i, 'credit', e.target.value); setLine(i, 'debit', ''); }} />
+                </td>
+                <td style={{ padding: '0.2rem' }}>
+                  <input type="text" className="custom-input" style={{ padding: '0.4rem', fontSize: '0.9rem' }}
+                    placeholder="بيان تفصيلي" value={l.description} onChange={e => setLine(i, 'description', e.target.value)} />
+                </td>
+                <td style={{ padding: '0.2rem', textAlign: 'center' }}>
+                  <button onClick={() => removeLine(i)} style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem' }}>
+          <button className="btn btn-outline" onClick={addLine} style={{ fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
+            + إضافة سطر
+          </button>
+          <button className="btn btn-primary" onClick={save} disabled={saving || Math.abs(diff) > 0.01} style={{ padding: '0.6rem 2rem' }}>
+            <CheckCircle size={18} /> حفظ القيد
+          </button>
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {loading ? (
-          <div className="loading-state" />
-        ) : data.items.length === 0 ? (
-          <div className="error-state">لا توجد حركات مالية مطابقة للبحث</div>
-        ) : (
-          <table className="custom-table" style={{ margin: 0 }}>
-            <thead style={{ position: 'sticky', top: 0, background: '#f8fafc' }}>
+      {/* ── Ledger Data ─────────────────────────────────────── */}
+      <div className="glass-panel" style={{ flex: 1, padding: '1.5rem', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h3 style={{ color: 'var(--secondary-color)' }}>دفتر اليومية العامة</h3>
+          <div style={{ position: 'relative', width: '250px' }}>
+            <Search size={16} style={{ position: 'absolute', right: '10px', top: '10px', color: 'var(--text-muted)' }} />
+            <input className="custom-input" style={{ paddingRight: '2rem' }}
+              placeholder="بحث في اليومية..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <table className="custom-table">
+            <thead>
               <tr>
                 <th>التاريخ</th>
-                <th>رقم المستند</th>
+                <th>المستند</th>
                 <th>الحساب</th>
                 <th>البيان</th>
-                <th style={{ textAlign: 'center' }}>مدين (له)</th>
-                <th style={{ textAlign: 'center' }}>دائن (عليه)</th>
-                {isAdmin && <th style={{width: '50px'}}></th>}
+                <th>مدين (ج.م)</th>
+                <th>دائن (ج.م)</th>
+                {isAdmin && <th style={{ width: '40px' }}></th>}
               </tr>
             </thead>
             <tbody>
-              {data.items.map((item, i) => (
-                <tr key={i}>
-                  <td style={{ fontSize: '0.85rem' }}>{item.date}</td>
-                  <td><span className="badge warning" style={{ fontFamily: 'monospace' }}>{item.doc_no}</span></td>
-                  <td style={{ fontWeight: 600 }}>{item.account}</td>
-                  <td>{item.description}</td>
-                  <td style={{ textAlign: 'center', color: 'var(--success-color)', fontWeight: 'bold' }}>{item.debit > 0 ? item.debit.toLocaleString('ar-EG') : '—'}</td>
-                  <td style={{ textAlign: 'center', color: 'var(--danger-color)',  fontWeight: 'bold' }}>{item.credit > 0 ? item.credit.toLocaleString('ar-EG') : '—'}</td>
+              {loading ? (
+                <tr><td colSpan="7" style={{ textAlign: 'center', padding: '2rem' }}>جاري التحميل...</td></tr>
+              ) : entries.map(e => (
+                <tr key={e.id}>
+                  <td style={{ fontSize: '0.85rem' }}>{e.date}</td>
+                  <td><span className="badge" style={{ background: 'var(--primary-light)', color: 'var(--primary-color)' }}>{e.doc_no}</span></td>
+                  <td style={{ fontWeight: 600 }}>{e.account}</td>
+                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{e.description}</td>
+                  <td style={{ fontWeight: 600, color: 'var(--primary-color)' }}>{e.debit ? e.debit.toLocaleString('ar-EG') : '-'}</td>
+                  <td style={{ fontWeight: 600, color: 'var(--secondary-color)' }}>{e.credit ? e.credit.toLocaleString('ar-EG') : '-'}</td>
                   {isAdmin && (
-                    <td style={{ textAlign: 'center' }}>
-                      <button onClick={() => deleteEntry(item.id)} title="حذف"
-                        style={{ background: 'var(--danger-light)', border: 'none', borderRadius: '6px', padding: '0.3rem 0.5rem', cursor: 'pointer', color: 'var(--danger-color)' }}>
-                        <Trash2 size={13} />
+                    <td>
+                      <button onClick={() => del(e.id)} style={{ background: 'transparent', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }}>
+                        <Trash2 size={14} />
                       </button>
                     </td>
                   )}
                 </tr>
               ))}
             </tbody>
-            <tfoot style={{ position: 'sticky', bottom: 0, background: 'var(--primary-color)', color: 'white' }}>
-              <tr>
-                <td colSpan="4" style={{ padding: '0.875rem 1rem', fontWeight: 'bold', background: 'transparent' }}>إجمالي الفترة المحددة:</td>
-                <td style={{ textAlign: 'center', fontWeight: 'bold', background: 'transparent' }}>{data.total_debit.toLocaleString('ar-EG')}</td>
-                <td style={{ textAlign: 'center', fontWeight: 'bold', background: 'transparent' }}>{data.total_credit.toLocaleString('ar-EG')}</td>
-                {isAdmin && <td style={{background: 'transparent'}}></td>}
-              </tr>
-            </tfoot>
           </table>
-          )
-        }
-      </div>
-
-      {/* Manual Entry Drawer */}
-      {showEntryForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(3px)' }} onClick={() => setShowEntryForm(false)}>
-          <div className="glass-panel" style={{ width: '800px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', borderRadius: '1rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }} onClick={e => e.stopPropagation()}>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ color: 'var(--secondary-color)' }}>إنشاء قيد يومية يدوي</h2>
-              <button onClick={() => setShowEntryForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={24} /></button>
-            </div>
-
-            {entryMsg && (
-              <div style={{ padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', background: entryMsg.type === 'success' ? 'var(--success-light)' : 'var(--danger-light)', color: entryMsg.type === 'success' ? 'var(--success-color)' : 'var(--danger-color)', fontWeight: 600 }}>
-                {entryMsg.text}
-              </div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label>رقم القيد</label>
-                <input className="custom-input" value={newEntry.doc_no} onChange={e => setNewEntry({...newEntry, doc_no: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label>التاريخ</label>
-                <input type="date" className="custom-input" value={newEntry.entry_date} onChange={e => setNewEntry({...newEntry, entry_date: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label>البيان العام</label>
-                <input className="custom-input" placeholder="وصف سبب القيد..." value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} />
-              </div>
-            </div>
-
-            <table className="custom-table" style={{ margin: 0 }}>
-              <thead style={{ background: 'rgba(0,0,0,0.02)' }}>
-                <tr>
-                  <th style={{ width: '40%' }}>الحساب</th>
-                  <th>مدين (منه)</th>
-                  <th>دائن (له)</th>
-                  <th style={{ width: '50px' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {newEntry.lines.map((line, idx) => (
-                  <tr key={idx}>
-                    <td>
-                      <select className="custom-input" style={{ width: '100%', padding: '0.4rem' }} value={line.account_id} onChange={e => handleLineChange(idx, 'account_id', e.target.value)}>
-                        <option value="">-- اختر الحساب --</option>
-                        {accounts.filter(a => a.parent_id != null).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                      </select>
-                    </td>
-                    <td><input type="number" className="custom-input" placeholder="0" value={line.debit} onChange={e => handleLineChange(idx, 'debit', e.target.value)} disabled={!!line.credit} /></td>
-                    <td><input type="number" className="custom-input" placeholder="0" value={line.credit} onChange={e => handleLineChange(idx, 'credit', e.target.value)} disabled={!!line.debit} /></td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button style={{ background: 'none', border: 'none', color: 'var(--danger-color)', cursor: 'pointer' }} onClick={() => removeLine(idx)}><X size={18} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button className="btn btn-outline" style={{ padding: '0.4rem 1rem' }} onClick={addLine}><PlusCircle size={16} /> إضافة سطر</button>
-              
-              <div style={{ display: 'flex', gap: '2rem', background: 'rgba(0,0,0,0.03)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)' }}>
-                <div>إجمالي المدين: <span style={{ fontWeight: 'bold', color: 'var(--success-color)' }}>{totalDebit.toLocaleString('ar-EG')}</span></div>
-                <div>إجمالي الدائن: <span style={{ fontWeight: 'bold', color: 'var(--danger-color)' }}>{totalCredit.toLocaleString('ar-EG')}</span></div>
-                <div style={{ fontWeight: 'bold', color: isBalanced ? 'var(--success-color)' : 'var(--danger-color)' }}>
-                  {isBalanced ? '✓ متزن' : '✗ غير متزن'}
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '1.5rem' }}>
-              <button className="btn btn-outline" onClick={() => setShowEntryForm(false)}>إلغاء</button>
-              <button className="btn btn-primary" onClick={saveEntry} disabled={entrySaving || !isBalanced}>
-                <CheckCircle size={18} /> {entrySaving ? 'جاري الحفظ...' : 'حفظ القيد وتسجيله'}
-              </button>
-            </div>
-          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

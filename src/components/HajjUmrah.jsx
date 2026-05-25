@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { PlusCircle, Search, Users, FileText, ChevronLeft, MapPin, X, Calendar, Trash2, Edit2, CheckCircle } from 'lucide-react';
+import { PlusCircle, Search, Users, FileText, MapPin, X, Calendar, Trash2, CheckCircle, User } from 'lucide-react';
 import { api } from '../api.js';
 
-const EMPTY_TRIP = { trip_name: '', type: 'عمرة', hotel_makkah: '', hotel_madinah: '', nights_makkah: 7, nights_madinah: 4, departure_date: '', return_date: '', price_per_person: '', cost_per_person: '', max_pilgrims: 45 };
-const EMPTY_PILGRIM = { full_name: '', passport_no: '', national_id: '', phone: '', amount_paid: '' };
+const EMPTY_TRIP = { trip_name: '', type: 'عمرة', hotel_makkah: '', hotel_madinah: '', nights_makkah: 7, nights_madinah: 4, departure_date: '', return_date: '', price_per_person: '', cost_per_person: '', max_pilgrims: 45, seller_id: '' };
+const EMPTY_PILGRIM = { full_name: '', passport_no: '', national_id: '', phone: '', total_price: '', amount_paid: '' };
 
 export default function HajjUmrah({ user }) {
   const isAdmin = user?.level === 3;
   const [trips, setTrips]       = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [form, setForm]         = useState(EMPTY_TRIP);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading]   = useState(true);
@@ -19,7 +20,11 @@ export default function HajjUmrah({ user }) {
   const [showPForm, setShowPForm]   = useState(false);
 
   const load = () => { api.getTrips().then(setTrips).finally(() => setLoading(false)); };
-  useEffect(() => { load(); }, []);
+  
+  useEffect(() => { 
+    load(); 
+    api.getEmployees().then(emps => setEmployees(emps.filter(e => e.is_active)));
+  }, []);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setP = (k, v) => setPForm(f => ({ ...f, [k]: v }));
@@ -27,7 +32,12 @@ export default function HajjUmrah({ user }) {
   async function saveTrip() {
     if (!form.trip_name || !form.price_per_person || !form.cost_per_person) return alert('أكمل البيانات الأساسية للرحلة');
     try {
-      await api.createTrip({ ...form, price_per_person: +form.price_per_person, cost_per_person: +form.cost_per_person });
+      await api.createTrip({
+        ...form,
+        price_per_person: parseFloat(form.price_per_person),
+        cost_per_person: parseFloat(form.cost_per_person),
+        seller_id: form.seller_id ? parseInt(form.seller_id) : null
+      });
       setForm(EMPTY_TRIP); setShowForm(false); load();
     } catch (e) { alert(e.message); }
   }
@@ -45,12 +55,18 @@ export default function HajjUmrah({ user }) {
   }
 
   async function savePilgrim() {
-    if (!pForm.full_name || !pForm.passport_no) return alert('أدخل الاسم ورقم الجواز');
+    if (!pForm.full_name || !pForm.passport_no || !pForm.total_price) return alert('أدخل الاسم ورقم الجواز والمبلغ المطلوب');
     try {
-      await api.addPilgrim({ ...pForm, trip_id: activeTrip.id, amount_paid: +pForm.amount_paid || 0 });
+      const tp = parseFloat(pForm.total_price);
+      const ap = parseFloat(pForm.amount_paid) || 0;
+      await api.addPilgrim({
+        ...pForm, trip_id: activeTrip.id,
+        total_price: tp, amount_paid: ap,
+        is_fully_paid: ap >= tp
+      });
       setPForm(EMPTY_PILGRIM); setShowPForm(false);
       const ps = await api.getPilgrims(activeTrip.id);
-      setPilgrims(ps); load(); // refresh main list for counts
+      setPilgrims(ps); load(); 
     } catch (e) { alert(e.message); }
   }
 
@@ -101,7 +117,10 @@ export default function HajjUmrah({ user }) {
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                    <h3 style={{ color: 'var(--primary-color)', fontSize: '1.1rem' }}>{t.trip_name}</h3>
+                    <div>
+                      <h3 style={{ color: 'var(--primary-color)', fontSize: '1.1rem' }}>{t.trip_name}</h3>
+                      {t.seller_name && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>البائع: {t.seller_name}</div>}
+                    </div>
                     <span className="badge success">{t.status}</span>
                   </div>
                   
@@ -127,8 +146,8 @@ export default function HajjUmrah({ user }) {
                       <div style={{ fontWeight: 'bold', color: 'var(--success-color)' }}>{(t.collected||0).toLocaleString('ar-EG')}</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>صافي الربح المتوقع</div>
-                      <div style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{(t.expected_profit||0).toLocaleString('ar-EG')}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>خالصو الدفع</div>
+                      <div style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>{t.fully_paid_count} معتمر</div>
                     </div>
                   </div>
                 </div>
@@ -154,6 +173,13 @@ export default function HajjUmrah({ user }) {
               <div className="form-group"><label>تاريخ العودة</label><input type="date" className="custom-input" value={form.return_date} onChange={e => set('return_date', e.target.value)} /></div>
               <div className="form-group"><label>تكلفة الفرد</label><input type="number" className="custom-input amount-input" value={form.cost_per_person} onChange={e => set('cost_per_person', e.target.value)} /></div>
               <div className="form-group"><label>سعر البيع</label><input type="number" className="custom-input amount-input" value={form.price_per_person} onChange={e => set('price_per_person', e.target.value)} /></div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>البائع (المنظم)</label>
+                <select className="custom-input" value={form.seller_id} onChange={e => set('seller_id', e.target.value)}>
+                  <option value="">-- مباشر --</option>
+                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                </select>
+              </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
               <button className="btn btn-outline" onClick={() => setShowForm(false)}>إلغاء</button>
@@ -179,19 +205,23 @@ export default function HajjUmrah({ user }) {
             <div style={{ padding: '1.5rem', flex: 1, overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                 <h4 style={{ color: 'var(--secondary-color)' }}>قائمة المعتمرين ({pilgrims.length})</h4>
-                <button className="btn btn-outline" style={{ padding: '0.4rem 1rem' }} onClick={() => setShowPForm(true)}><PlusCircle size={16} /> إضافة معتمر</button>
+                <button className="btn btn-outline" style={{ padding: '0.4rem 1rem' }} onClick={() => {
+                  setPForm({ ...EMPTY_PILGRIM, total_price: activeTrip.price_per_person.toString() });
+                  setShowPForm(true);
+                }}><PlusCircle size={16} /> إضافة معتمر</button>
               </div>
 
               {showPForm && (
                 <div style={{ background: 'rgba(0,0,0,0.02)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem' }}>
-                  <div className="form-group"><input className="custom-input" placeholder="الاسم الرباعي" value={pForm.full_name} onChange={e => setP('full_name', e.target.value)} /></div>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <div className="form-group" style={{flex:1}}><input className="custom-input" placeholder="رقم الجواز" value={pForm.passport_no} onChange={e => setP('passport_no', e.target.value)} /></div>
-                    <div className="form-group" style={{flex:1}}><input type="number" className="custom-input" placeholder="المبلغ المدفوع" value={pForm.amount_paid} onChange={e => setP('amount_paid', e.target.value)} /></div>
+                  <div className="form-group"><label>الاسم الرباعي</label><input className="custom-input" value={pForm.full_name} onChange={e => setP('full_name', e.target.value)} /></div>
+                  <div className="form-group"><label>رقم الجواز</label><input className="custom-input" value={pForm.passport_no} onChange={e => setP('passport_no', e.target.value)} /></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div className="form-group"><label>إجمالي المطلوب</label><input type="number" className="custom-input" value={pForm.total_price} onChange={e => setP('total_price', e.target.value)} /></div>
+                    <div className="form-group"><label>المبلغ المدفوع</label><input type="number" className="custom-input" value={pForm.amount_paid} onChange={e => setP('amount_paid', e.target.value)} /></div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                    <button className="btn btn-outline" style={{ padding: '0.3rem 1rem' }} onClick={() => setShowPForm(false)}>إلغاء</button>
-                    <button className="btn btn-primary" style={{ padding: '0.3rem 1rem' }} onClick={savePilgrim}>حفظ</button>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+                    <button className="btn btn-outline" style={{ padding: '0.4rem 1rem' }} onClick={() => setShowPForm(false)}>إلغاء</button>
+                    <button className="btn btn-primary" style={{ padding: '0.4rem 1rem' }} onClick={savePilgrim}>حفظ البيانات</button>
                   </div>
                 </div>
               )}
@@ -202,12 +232,18 @@ export default function HajjUmrah({ user }) {
                     <div>
                       <div style={{ fontWeight: 600, color: 'var(--secondary-color)' }}>{p.full_name}</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: '0.2rem' }}>{p.passport_no}</div>
+                      <div style={{ marginTop: '0.4rem' }}>
+                        {p.is_fully_paid ? 
+                          <span className="badge success" style={{ padding: '0.1rem 0.3rem', fontSize: '0.7rem' }}>✅ خالص الدفع</span> : 
+                          <span className="badge warning" style={{ padding: '0.1rem 0.3rem', fontSize: '0.7rem' }}>⚠️ متبقي: {(p.remaining || 0).toLocaleString('ar-EG')}</span>
+                        }
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ textAlign: 'left' }}>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>المدفوع</div>
-                        <div style={{ fontWeight: 'bold', color: p.amount_paid >= activeTrip.price_per_person ? 'var(--success-color)' : 'var(--warning-color)' }}>
-                            {p.amount_paid.toLocaleString('ar-EG')} / {activeTrip.price_per_person.toLocaleString('ar-EG')}
+                        <div style={{ fontWeight: 'bold', color: p.is_fully_paid ? 'var(--success-color)' : 'var(--primary-color)' }}>
+                            {(p.amount_paid||0).toLocaleString('ar-EG')} / {(p.total_price||0).toLocaleString('ar-EG')}
                         </div>
                         </div>
                         {isAdmin && (

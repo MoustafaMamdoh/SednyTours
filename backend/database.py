@@ -55,23 +55,26 @@ class Receipt(Base):
     id = Column(Integer, primary_key=True, index=True)
     receipt_no = Column(String, unique=True)
     type = Column(String)    # قبض / صرف
-    account_id = Column(Integer, ForeignKey("accounts.id"))
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    account_name_manual = Column(String, nullable=True)   # ← NEW: اسم الحساب يدوي
     cost_center_id = Column(Integer, ForeignKey("cost_centers.id"), nullable=True)
     period_id = Column(Integer, ForeignKey("periods.id"))
     amount = Column(Float)
     description = Column(Text)
-    payment_method = Column(String, default="cash")  # cash/check/instapay/bank_transfer/wallet
+    payment_method = Column(String, default="cash")
     check_no = Column(String, nullable=True)
     bank_name = Column(String, nullable=True)
     bank_account = Column(String, nullable=True)
     due_date = Column(Date, nullable=True)
-    ref_no = Column(String, nullable=True)          # instapay/bank reference
-    wallet_no = Column(String, nullable=True)       # wallet number
-    wallet_provider = Column(String, nullable=True) # vodafone / orange / etc.
+    ref_no = Column(String, nullable=True)
+    wallet_no = Column(String, nullable=True)
+    wallet_provider = Column(String, nullable=True)
     payee = Column(String)
     receipt_date = Column(Date, default=date.today)
     is_accepted = Column(Boolean, default=False)
     user_id = Column(Integer, ForeignKey("users.id"))
+    seller_id = Column(Integer, ForeignKey("employees.id"), nullable=True)   # ← NEW: البائع
+    seller_commission = Column(Float, default=0.0)                           # ← NEW: عمولة البيع
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -79,10 +82,11 @@ class JournalEntry(Base):
     __tablename__ = "journal_entries"
     id = Column(Integer, primary_key=True, index=True)
     doc_no = Column(String)
-    doc_type = Column(String)     # REC / PAY / TKT / SAL / HAJJ
-    account_id = Column(Integer, ForeignKey("accounts.id"))
+    doc_type = Column(String)     # REC / PAY / TKT / SAL / HAJJ / JRN
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    account_name_manual = Column(String, nullable=True)   # ← NEW: اسم الحساب يدوي
     cost_center_id = Column(Integer, ForeignKey("cost_centers.id"), nullable=True)
-    period_id = Column(Integer, ForeignKey("periods.id"))
+    period_id = Column(Integer, ForeignKey("periods.id"), nullable=True)
     description = Column(Text)
     debit = Column(Float, default=0.0)
     credit = Column(Float, default=0.0)
@@ -96,17 +100,19 @@ class Ticket(Base):
     __tablename__ = "tickets"
     id = Column(Integer, primary_key=True, index=True)
     pnr = Column(String, unique=True)
-    airline = Column(String)
+    airline = Column(String)   # free-text
     passenger_name = Column(String)
     route = Column(String)
     cost_price = Column(Float)
     sell_price = Column(Float)
-    ticket_type = Column(String, default="اقتصادي")  # اقتصادي / أعمال / أول
+    ticket_type = Column(String, default="اقتصادي")
     ticket_date = Column(Date, default=date.today)
     period_id = Column(Integer, ForeignKey("periods.id"))
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
-    status = Column(String, default="مباعة")  # مباعة / مرتجعة / ملغية
+    status = Column(String, default="مباعة")
     user_id = Column(Integer, ForeignKey("users.id"))
+    seller_id = Column(Integer, ForeignKey("employees.id"), nullable=True)   # ← NEW
+    seller_commission = Column(Float, default=0.0)                           # ← NEW
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -114,7 +120,7 @@ class HajjTrip(Base):
     __tablename__ = "hajj_trips"
     id = Column(Integer, primary_key=True, index=True)
     trip_name = Column(String, nullable=False)
-    type = Column(String, default="عمرة")    # عمرة / حج
+    type = Column(String, default="عمرة")
     hotel_makkah = Column(String)
     hotel_madinah = Column(String)
     nights_makkah = Column(Integer, default=7)
@@ -124,8 +130,9 @@ class HajjTrip(Base):
     price_per_person = Column(Float)
     cost_per_person = Column(Float)
     max_pilgrims = Column(Integer, default=45)
-    status = Column(String, default="قيد التسجيل")   # قيد التسجيل / مكتملة / ملغية
+    status = Column(String, default="قيد التسجيل")
     period_id = Column(Integer, ForeignKey("periods.id"))
+    seller_id = Column(Integer, ForeignKey("employees.id"), nullable=True)   # ← NEW
     pilgrims = relationship("HajjPilgrim", back_populates="trip")
 
 
@@ -137,7 +144,9 @@ class HajjPilgrim(Base):
     passport_no = Column(String)
     national_id = Column(String)
     phone = Column(String)
-    amount_paid = Column(Float, default=0.0)
+    total_price = Column(Float, default=0.0)    # ← NEW: إجمالي المبلغ المطلوب
+    amount_paid = Column(Float, default=0.0)    # المبلغ المدفوع
+    is_fully_paid = Column(Boolean, default=False)  # ← NEW: هل دفع الكل؟
     is_accepted = Column(Boolean, default=False)
     trip = relationship("HajjTrip", back_populates="pilgrims")
 
@@ -148,6 +157,7 @@ class Employee(Base):
     name = Column(String, nullable=False)
     job_title = Column(String)
     base_salary = Column(Float, default=0.0)
+    commission_rate = Column(Float, default=0.0)   # ← NEW: نسبة العمولة الافتراضية %
     is_active = Column(Boolean, default=True)
     salaries = relationship("Salary", back_populates="employee")
 
@@ -157,13 +167,14 @@ class Salary(Base):
     id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(Integer, ForeignKey("employees.id"))
     period_id = Column(Integer, ForeignKey("periods.id"))
-    base_salary = Column(Float)
-    bonus = Column(Float, default=0.0)
-    commission = Column(Float, default=0.0)
-    deductions = Column(Float, default=0.0)
-    guarantee = Column(Float, default=0.0)       # عهدة
-    net_salary = Column(Float)
+    base_salary = Column(Float, default=0.0)
+    bonus = Column(Float, default=0.0)          # مكافآت / بدلات
+    commission = Column(Float, default=0.0)     # عمولات (تُحسب تلقائياً)
+    deductions = Column(Float, default=0.0)     # خصومات / سلف
+    guarantee = Column(Float, default=0.0)      # عهدة / كفالة
+    net_salary = Column(Float, default=0.0)
     is_paid = Column(Boolean, default=False)
+    notes = Column(Text, nullable=True)         # ← NEW: ملاحظات
     employee = relationship("Employee", back_populates="salaries")
 
 
