@@ -15,8 +15,10 @@ from database import (
     get_db, create_tables,
     User, Period, Account, CostCenter,
     Receipt, JournalEntry, Ticket,
-    HajjTrip, HajjPilgrim, Employee, Salary
+    HajjTrip, HajjPilgrim, Employee, Salary,
+    db_path, application_path
 )
+import sys
 
 app = FastAPI(title="Sydney Tours Accounting API", version="3.0.0")
 
@@ -29,7 +31,10 @@ app.add_middleware(
 )
 
 # ─── SERVE FRONTEND ───────────────────────────────────────────
-frontend_dist = os.path.join(os.path.dirname(__file__), "..", "dist")
+if getattr(sys, 'frozen', False):
+    frontend_dist = os.path.join(sys._MEIPASS, "dist")
+else:
+    frontend_dist = os.path.join(os.path.dirname(__file__), "..", "dist")
 
 @app.on_event("startup")
 def startup():
@@ -847,7 +852,6 @@ def list_periods(db: Session = Depends(get_db)):
 @app.get("/api/backup")
 def download_backup(caller_id: int = 1, db: Session = Depends(get_db)):
     require_admin(caller_id, db)
-    db_path = os.path.join(os.path.dirname(__file__), "sydney_tours.db")
     if not os.path.exists(db_path):
         raise HTTPException(404, "ملف قاعدة البيانات غير موجود")
     return FileResponse(db_path, media_type="application/octet-stream", filename=f"sydney_tours_backup_{date.today()}.db")
@@ -857,8 +861,6 @@ async def restore_backup(file: UploadFile = File(...), caller_id: int = 1, db: S
     require_admin(caller_id, db)
     if not file.filename.endswith(".db"):
         raise HTTPException(400, "يجب أن يكون الملف بامتداد .db")
-    
-    db_path = os.path.join(os.path.dirname(__file__), "sydney_tours.db")
     
     # Close connections if possible, though SQLite handles it okay usually if we just replace it
     try:

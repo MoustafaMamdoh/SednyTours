@@ -1,11 +1,32 @@
+import os
+import sys
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime, date
 
-DATABASE_URL = "sqlite:///./sydney_tours.db"
+# Determine application path (always needed for backup/restore)
+if getattr(sys, 'frozen', False):
+    application_path = os.path.dirname(sys.executable)
+else:
+    application_path = os.path.dirname(__file__)
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+db_path = os.path.join(application_path, "sydney_tours.db")
+
+# Read from environment for online server (MySQL/Postgres)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    # Default to local SQLite for Desktop/Local
+    DATABASE_URL = f"sqlite:///{db_path}"
+
+# Connect args are only needed for SQLite
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    # For MySQL / PostgreSQL
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

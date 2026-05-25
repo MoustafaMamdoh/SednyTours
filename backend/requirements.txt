@@ -1,0 +1,8 @@
+fastapi==0.115.12
+uvicorn==0.34.3
+sqlalchemy==2.0.41
+python-multipart==0.0.20
+pydantic==2.11.4
+PyMySQL==1.1.1
+cryptography==44.0.4
+a2wsgi==1.10.8

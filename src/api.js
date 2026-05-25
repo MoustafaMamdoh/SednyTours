@@ -1,6 +1,6 @@
-const isDev = window.location.port === "5173";
-// FIXME: Update this to Render URL after backend deployment
-export const BASE = "http://localhost:8000/api";
+const isDev = window.location.port === "5173" || window.location.port === "8000";
+// In dev/desktop: use localhost:8000. In production (Hostinger): use relative /api
+export const BASE = isDev ? `http://${window.location.hostname}:8000/api` : "/api";
 
 async function req(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
