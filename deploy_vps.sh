@@ -13,7 +13,7 @@ echo "╚═══════════════════════�
 # ─── CONFIGURATION (EDIT THESE!) ─────────────────────────────
 DB_NAME="sydney_tours"
 DB_USER="sydney_admin"
-DB_PASS="SydneyTours@2026!"
+DB_PASS="SydneyTours2026" # Avoid @ or special chars unless URL encoded
 DOMAIN="_"  # Replace with your domain, e.g. sydneytours.com. Use "_" for IP-only access.
 APP_DIR="/var/www/sydneytours"
 REPO_URL="https://github.com/MoustafaMamdoh/SednyTours.git"
