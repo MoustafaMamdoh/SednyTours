@@ -22,3 +22,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# PyInstaller
+backend/build/
+backend/dist/
+backend/*.spec
+__pycache__/
+*.pyc
+
+# Database
+*.db
